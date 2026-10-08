@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fmatsch.ist</title>
+<meta name="description" content="Kleine, fokussierte Apps für macOS, Windows und den Raspberry Pi – von Befundassistenten für die Praxis bis zu Video- und Netzwerk-Werkzeugen.">
+<meta property="og:title" content="fmatsch.ist">
+<meta property="og:description" content="Kleine, fokussierte Apps für macOS, Windows und den Raspberry Pi.">
+<meta name="color-scheme" content="light dark">
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --surface: #ffffff;
+    --text: #1c1b19;
+    --muted: #6b6860;
+    --line: #e4e1d9;
+    --accent: #c2410c;
+    --chip: #efede6;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px -12px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141413;
+      --surface: #1d1c1a;
+      --text: #f1efe9;
+      --muted: #a19d93;
+      --line: #2e2c29;
+      --accent: #fb923c;
+      --chip: #272522;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141413; --surface: #1d1c1a; --text: #f1efe9; --muted: #a19d93;
+    --line: #2e2c29; --accent: #fb923c; --chip: #272522;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+  header { padding: 72px 0 40px; }
+  .brand {
+    font-size: clamp(40px, 8vw, 72px);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1;
+    margin: 0 0 20px;
+  }
+  .brand span { color: var(--accent); }
+
+  nav.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 36px 0 0; }
+  nav.filters button {
+    font: inherit; font-size: 14px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  nav.filters button:hover { color: var(--text); }
+  nav.filters button[aria-pressed="true"] {
+    background: var(--text); color: var(--bg); border-color: var(--text);
+  }
+
+  section { margin: 0 0 48px; }
+  section h2 {
+    font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted);
+    margin: 0 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    position: relative;
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    text-decoration: none;
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .card:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .top { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .icon {
+    flex: none; width: 52px; height: 52px; border-radius: 12px;
+    object-fit: cover;
+  }
+  .icon.fallback {
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 20px; color: #fff;
+    background: var(--c, #555);
+  }
+  .card h3 { margin: 0; font-size: 18px; letter-spacing: -0.01em; line-height: 1.25; }
+  .card h3 a { text-decoration: none; }
+  .card h3 a::after { content: ""; position: absolute; inset: 0; border-radius: 16px; }
+  .version { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .card p { margin: 0 0 16px; color: var(--muted); font-size: 15px; flex: 1; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tag {
+    font-size: 12px; padding: 2px 9px; border-radius: 999px;
+    background: var(--chip); color: var(--muted);
+  }
+  .src {
+    position: relative; z-index: 1;
+    margin-left: auto; font-size: 13px; color: var(--muted);
+    text-decoration: none; padding: 2px 4px;
+  }
+  .src:hover { color: var(--accent); }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 0 48px;
+    color: var(--muted); font-size: 14px;
+    display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between;
+  }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 480px) {
+    header { padding: 48px 0 28px; }
+    .grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } .card:hover { transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="brand">fmatsch<span>.</span>ist</h1>
+    <nav class="filters" aria-label="Nach Plattform filtern">
+      <button type="button" data-filter="all" aria-pressed="true">Alle</button>
+      <button type="button" data-filter="macOS" aria-pressed="false">macOS</button>
+      <button type="button" data-filter="Windows" aria-pressed="false">Windows</button>
+      <button type="button" data-filter="Raspberry Pi" aria-pressed="false">Raspberry Pi</button>
+    </nav>
+  </header>
+
+  <main id="projects"></main>
+
+  <footer>
+    <span>© <span id="year">2026</span> fmatsch</span>
+    <a href="https://github.com/fmatsch">github.com/fmatsch</a>
+  </footer>
+</div>
+
+<script>
+const GH = "https://github.com/fmatsch/";
+const PAGES = "https://fmatsch.github.io/";
+
+const groups = [
+  {
+    title: "Medizin",
+    projects: [
+      { repo: "echobefund", name: "Echobefund", version: "v0.5.0", icon: "icons/echobefund.png",
+        desc: "Befundassistent für die Echokardiographie: Messwerte eingeben, automatisch graduieren, Befundtext erzeugen – mit GDT-Anbindung an Praxissoftware wie EOSWIN.",
+        platforms: ["macOS", "Windows"] },
+      { repo: "abdomenbefund", name: "Abdomenbefund", version: "v0.1.0", icon: "icons/abdomenbefund.png",
+        desc: "Befundassistent für die Abdomensonographie: Befunde anklicken – Befundtext, Zusammenfassung und Diagnosen entstehen automatisch. GDT-Anbindung an EOSWIN.",
+        platforms: ["macOS", "Windows"] },
+    ],
+  },
+  {
+    title: "Video & Audio",
+    projects: [
+      { repo: "sighting", name: "Sighting", version: "v1.5.0", icon: "icons/sighting.png",
+        desc: "Videomaterial sichten: automatische Timecode-Notizen, lokale Whisper-Transkription, Export als PDF, DOCX, CSV und für Premiere Pro.",
+        platforms: ["macOS", "Windows"] },
+      { repo: "YTlive", name: "YTlive", icon: null, color: "#dc2626",
+        desc: "Playlists oder Livequellen (Kamera, Capture-Karte, Bildschirm, NDI) nach YouTube Live streamen – mit Bumper, Crossfades und Bandbreiten-Dashboard.",
+        platforms: ["macOS", "Windows"] },
+      { repo: "AudioSyncerPremierePro", name: "AudioSyncer", icon: null, color: "#7c3aed",
+        desc: "Native Mac-App, die Multicam-Aufnahmen per Audio synchronisiert und fertige Premiere-Pro-Projekte exportiert.",
+        platforms: ["macOS"] },
+      { repo: "ffmpeg-konverter", name: "FFmpeg Konverter", version: "v1.1.4", icon: "icons/ffmpeg-konverter.png",
+        desc: "Benutzerfreundlicher Video- und Audio-Konverter auf Basis von FFmpeg – ohne Kommandozeile.",
+        platforms: ["macOS", "Windows"] },
+      { repo: "chew-player", name: "Chew Player", version: "v0.3.18", icon: "icons/chew-player.png",
+        desc: "Ordnerbasierter Musik- und Videoplayer. Spielt fast jedes Format, ergänzt Tags und Cover über MusicBrainz und streamt auf Apple TV, Android TV und Fire TV.",
+        platforms: ["macOS", "Windows"] },
+    ],
+  },
+  {
+    title: "Netzwerk & System",
+    projects: [
+      { repo: "scanip", name: "scanip", version: "v1.1.1", icon: "icons/scanip.png",
+        desc: "Netzwerk-Scanner: jedes Gerät mit IP, offenen Ports, MAC-Adresse, Gerätekategorie und Namen – ohne Installation und ohne Administratorrechte.",
+        platforms: ["macOS", "Windows"] },
+      { repo: "HackberryPiOS", name: "HackberryPiOS", version: "v1.2.0", icon: null, color: "#15803d",
+        desc: "Netzwerk-Audit-Toolkit für den HackberryPi CM5: Hosts, AD/DC, SMB-Freigaben, Drucker, Ports, WLAN, Speedtest und Sicherheitsempfehlungen in einer Tastatur-TUI.",
+        platforms: ["Raspberry Pi"] },
+      { repo: "revive-app", name: "Revive", version: "v1.4.1", icon: null, color: "#0891b2",
+        desc: "Menüleisten-App, die den Mac ohne Neustart auffrischt: RAM freigeben, Finder neu starten, DNS-Cache leeren – mit einem Klick.",
+        platforms: ["macOS"] },
+      { repo: "opst", name: "OPST", icon: null, color: "#2563eb",
+        desc: "Outlook-OST-Dateien verlustarm in PST umwandeln – mit Vorschau vor dem Export und einem detaillierten Verlust-Report danach.",
+        platforms: ["macOS"] },
+    ],
+  },
+];
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function card(p) {
+  const icon = p.icon
+    ? `<img class="icon" src="${p.icon}" alt="" width="52" height="52" loading="lazy">`
+    : `<span class="icon fallback" style="--c:${p.color}" aria-hidden="true">${esc(p.name[0])}</span>`;
+  return `
+    <article class="card" data-platforms="${esc(p.platforms.join("|"))}">
+      <div class="top">
+        ${icon}
+        <div>
+          <h3><a href="${PAGES}${p.repo}/">${esc(p.name)}</a></h3>
+          ${p.version ? `<div class="version">${esc(p.version)}</div>` : ""}
+        </div>
+      </div>
+      <p>${esc(p.desc)}</p>
+      <div class="meta">
+        ${p.platforms.map(x => `<span class="tag">${esc(x)}</span>`).join("")}
+        <a class="src" href="${GH}${p.repo}" aria-label="Quellcode von ${esc(p.name)} auf GitHub">Code ↗</a>
+      </div>
+    </article>`;
+}
+
+const main = document.getElementById("projects");
+main.innerHTML = groups.map(g => `
+  <section>
+    <h2>${esc(g.title)}</h2>
+    <div class="grid">${g.projects.map(card).join("")}</div>
+  </section>`).join("");
+
+document.getElementById("year").textContent = new Date().getFullYear();
+
+const buttons = document.querySelectorAll("nav.filters button");
+buttons.forEach(b => b.addEventListener("click", () => {
+  const f = b.dataset.filter;
+  buttons.forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  main.querySelectorAll(".card").forEach(c => {
+    c.hidden = f !== "all" && !c.dataset.platforms.split("|").includes(f);
+  });
+  main.querySelectorAll("section").forEach(s => {
+    s.hidden = !s.querySelector(".card:not([hidden])");
+  });
+}));
+</script>
+</body>
+</html>
