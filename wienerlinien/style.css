@@ -60,3 +60,5 @@ footer a{color:inherit}
 .modeswitch button{position:relative;z-index:1;display:grid;place-items:center;border:0;background:transparent;color:var(--accent);font:800 15px/1 system-ui;cursor:pointer;padding:0;transition:color .2s}
 .modeswitch button[aria-pressed=true]{color:#fff}
 .modeswitch button:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+.chip-link{border:0;background:none;color:var(--mute);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:3px 6px}
+.filters{max-width:100%}

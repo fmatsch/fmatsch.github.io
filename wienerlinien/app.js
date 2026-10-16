@@ -73,7 +73,7 @@ function addLayers() {
   for (const line of Object.keys(net.lines)) {
     const grp = L.layerGroup(), sg = L.layerGroup();
     const H = tracks[line + '/H'];
-    L.polyline(H.path, {color: H.color, weight: mode === 'tram' ? 4 : 5, opacity: .9, lineCap: 'round'}).addTo(grp);
+    L.polyline(H.path, {color: H.color, weight: mode === 'tram' ? 3 : 5, opacity: mode === 'tram' ? .8 : .9, lineCap: 'round'}).addTo(grp);
     for (const s of H.st) {
       L.circleMarker([s.lat, s.lon], {radius: mode === 'tram' ? 3.5 : 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
         .bindTooltip(`<b>${s.name}</b><br><span class="sub">${line}</span>`, {direction: 'top', offset: [0, -4]}).addTo(sg);
@@ -204,14 +204,20 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-let pollGen = 0, pollTimer = null;
+let pollGen = 0, pollTimer = null, loadingNew = false, nowTimer = null;
+function pollNow() {            // tram: the set of wanted lines changed -> fetch soon (debounced)
+  if (mode !== 'tram') return;
+  clearTimeout(nowTimer);
+  nowTimer = setTimeout(() => { pollGen++; clearTimeout(pollTimer); poll(pollGen); }, 700);
+}
 async function poll(gen) {
   if (gen !== pollGen) return;
   try {
-    const r = await fetch(api('trains'), {cache: 'no-store'});
+    if (mode === 'tram' && active.size === 0) { renderStatus(); pollTimer = setTimeout(() => poll(gen), 5000); return; }
+    const r = await fetch(api('trains') + (mode === 'tram' ? '&lines=' + [...active].join(',') : ''), {cache: 'no-store'});
     const res = await r.json();
     if (gen !== pollGen) return;          // mode switched while the request was running
-    if (res.trains) onData(res);
+    if (res.trains) { onData(res); loadingNew = !!res.loading; }
     else lastMsg = res.error || 'keine Daten';
   } catch (e) { lastMsg = 'API nicht erreichbar'; }
   renderStatus();
@@ -223,9 +229,10 @@ function renderStatus() {
   const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
   const ok = age !== null && age < Math.max(90, pollMs * 2.5 / 1000);
   el.className = 'status ' + (ok ? 'ok' : 'bad');
-  txt.textContent = ok ? `${lastCount} Züge · Stand vor ${age} s` : `keine aktuellen Daten${lastMsg && lastMsg !== 'ok' ? ' – ' + lastMsg : ''}`;
+  txt.textContent = ok ? `${[...trains.values()].filter((t) => active.has(t.data.line)).length} Züge · Stand vor ${age} s${mode === 'tram' && active.size > 6 ? ' · viele Linien = langsamere Updates' : ''}` : `keine aktuellen Daten${lastMsg && lastMsg !== 'ok' ? ' – ' + lastMsg : ''}`;
   const n = $('#notice');
-  if (ok && lastCount === 0) { n.hidden = false; n.textContent = 'Gerade fahren keine Züge (Nachtpause) oder die Wiener Linien liefern keine Prognosen.'; }
+  if (ok && loadingNew) { n.hidden = false; n.textContent = 'Daten der gewählten Linien werden geladen …'; }
+  else if (ok && lastCount === 0) { n.hidden = false; n.textContent = 'Gerade fahren keine Züge (Nachtpause) oder die Wiener Linien liefern keine Prognosen.'; }
   else n.hidden = true;
 }
 
@@ -266,8 +273,13 @@ function setView(v) {
   if (v === 'map') for (const tr of trains.values()) syncVisibility(tr);
 }
 
+function setSwitch(m) {
+  document.querySelectorAll('.modeswitch button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === m));
+  document.querySelector('.modeswitch').dataset.mode = m;
+  $('#h1').firstChild.nodeValue = MODES[m].title + ' ';
+}
 async function loadMode(m) {
-  mode = m; ls.set('wl.mode', m);
+  mode = m; ls.set('wl.mode', m); setSwitch(m);
   pollGen++; clearTimeout(pollTimer);
   for (const tr of trains.values()) { if (tr.marker) map.removeLayer(tr.marker); if (tr.g) tr.g.remove(); }
   trains.clear();
@@ -278,16 +290,25 @@ async function loadMode(m) {
   if (mode !== m) return;                 // switched again meanwhile
   for (const [line, v] of Object.entries(net.lines)) for (const [d, td] of Object.entries(v.dirs)) tracks[line + '/' + d] = prepTrack(line, d, td);
   LINES = Object.keys(net.lines);
-  const saved = ls.get('wl.lines.' + m, LINES).filter((l) => LINES.includes(l));
+  const dflt = m === 'tram' ? ['1', '2', 'D'] : LINES;      // the API limits how many stops may be asked per minute: start small
+  const saved = ls.get('wl.lines.' + m, dflt).filter((l) => LINES.includes(l));
   active = new Set(saved.length ? saved : LINES);
   const f = $('#filters'); f.innerHTML = '';
   $('#debug-line').innerHTML = '';
   for (const line of LINES) {
     const b = document.createElement('button');
     b.className = 'chip'; b.textContent = line; b.dataset.line = line; b.style.setProperty('--c', colorOf(line));
-    b.addEventListener('click', () => { active.has(line) ? active.delete(line) : active.add(line); ls.set('wl.lines.' + m, [...active]); applyFilter(); });
+    b.addEventListener('click', () => { active.has(line) ? active.delete(line) : active.add(line); ls.set('wl.lines.' + m, [...active]); applyFilter(); pollNow(); });
     f.appendChild(b);
     $('#debug-line').insertAdjacentHTML('beforeend', `<option>${line}</option>`);
+  }
+  if (LINES.length > 6) {
+    for (const [label, all] of [['alle', true], ['keine', false]]) {
+      const b = document.createElement('button');
+      b.className = 'chip-link'; b.textContent = label;
+      b.addEventListener('click', () => { active = new Set(all ? LINES : []); ls.set('wl.lines.' + m, [...active]); applyFilter(); pollNow(); });
+      f.appendChild(b);
+    }
   }
   $('#filters').hidden = LINES.length < 2;
   $('#h1').firstChild.nodeValue = MODES[m].title + ' ';
@@ -301,7 +322,13 @@ async function loadMode(m) {
 
 async function boot() {
   createMap();
-  document.querySelectorAll('.modeswitch button').forEach((b) => b.addEventListener('click', () => { if (b.dataset.mode !== mode) loadMode(b.dataset.mode); }));
+  document.querySelectorAll('.modeswitch button').forEach((b) => b.addEventListener('click', async () => {
+    const m = b.dataset.mode;
+    if (m === mode && net) return;
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);   // an old #tram must not win on reload
+    setSwitch(m);                                   // instant feedback, the data follows
+    try { await loadMode(m); } catch (e) { $('#notice').hidden = false; $('#notice').textContent = 'Umschalten fehlgeschlagen: ' + e; }
+  }));
   $('#tab-map').onclick = () => setView('map'); $('#tab-net').onclick = () => setView('net');
   $('#debug-toggle').onclick = () => { const h = $('#debug').hidden = !$('#debug').hidden; if (!h) loadDebug(); setTimeout(() => map.invalidateSize(), 0); };
   $('#debug-line').onchange = loadDebug;
