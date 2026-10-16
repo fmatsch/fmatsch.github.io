@@ -59,16 +59,24 @@ function initMap() {
   L.tileLayer('https://mapsneu.wien.gv.at/basemap/bmapgrau/normal/google3857/{z}/{y}/{x}.png', {
     maxZoom: 19, className: 'basemap',
     attribution: 'Grundkarte: <a href="https://basemap.at">basemap.at</a> (CC BY 4.0)'}).addTo(map);
+  const labeled = new Set();
   for (const line of Object.keys(net.lines)) {
     const grp = L.layerGroup(), sg = L.layerGroup();
     const H = tracks[line + '/H'];
     L.polyline(H.path, {color: H.color, weight: 5, opacity: .9, lineCap: 'round'}).addTo(grp);
     for (const s of H.st) {
-      L.circleMarker([s.lat, s.lon], {radius: 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
+      const cm = L.circleMarker([s.lat, s.lon], {radius: 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
         .bindTooltip(`<b>${s.name}</b><br><span class="sub">${line}</span>`, {direction: 'top', offset: [0, -4]}).addTo(sg);
+      if (!labeled.has(s.diva)) {      // interchange stations: one label only
+        labeled.add(s.diva);
+        L.marker([s.lat, s.lon], {interactive: false, keyboard: false, icon: L.divIcon({className: 'stn-label-wrap', iconSize: [0, 0],
+          html: `<span class="stn-label">${s.name}</span>`})}).addTo(sg);
+      }
     }
     lineLayers[line] = grp; stationLayers[line] = sg;
   }
+  const zoomLabels = () => map.getContainer().classList.toggle('labels', map.getZoom() >= 13);
+  map.on('zoomend', zoomLabels); zoomLabels();
   map.fitBounds(L.polyline(Object.values(tracks).flatMap((t) => t.path)).getBounds().pad(0.05));
   applyFilter();
 }

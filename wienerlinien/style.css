@@ -50,3 +50,6 @@ footer a{color:inherit}
 @media (max-width:640px){.status{margin-left:0;width:100%}footer .link{margin-left:0}}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .basemap{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}}
 :root[data-theme=dark] .basemap{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+.stn-label{display:none;position:absolute;left:9px;top:-8px;white-space:nowrap;font:600 11px/1.2 system-ui,sans-serif;color:#1c1c1e;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 4px #fff;pointer-events:none}
+.labels .stn-label{display:block}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .stn-label{color:#ececee;text-shadow:-1px -1px 0 #141416,1px -1px 0 #141416,-1px 1px 0 #141416,1px 1px 0 #141416,0 0 4px #141416}}
