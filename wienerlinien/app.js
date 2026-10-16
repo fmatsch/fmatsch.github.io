@@ -1,14 +1,19 @@
 (() => {
 'use strict';
 const API = (window.WL_API || '') + '/api/';
-const LINES = ['U1', 'U2', 'U3', 'U4', 'U6'];
-const COLORS = {U1: '#E3000F', U2: '#A862A4', U3: '#EF7C00', U4: '#00A04A', U5: '#2FB8B2', U6: '#9C6B3C'};
+const MODES = {u: {title: 'U-Bahn Wien', file: 'network.json'}, tram: {title: 'Straßenbahn Wien', file: 'network_tram.json'}};
+let mode = ls0('wl.mode', 'u');
+if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#u') mode = 'u';
+const api = (path) => API + path + (mode === 'tram' ? '?mode=tram' : '');
+let LINES = [];
+const colorOf = (line) => (net && net.lines[line] && net.lines[line].color) || '#888';
+function ls0(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }
 const $ = (s) => document.querySelector(s);
 const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString('de-AT', {timeZone: 'Europe/Vienna', hour: '2-digit', minute: '2-digit', second: '2-digit'});
 const ls = {get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } },
             set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }};
 
-let net = null, tracks = {}, active = new Set(ls.get('wl.lines', LINES));
+let net = null, tracks = {}, active = new Set();
 let trains = new Map();            // id -> {data, err, t0, marker, g}
 let clockOffset = 0;               // serverTime - clientTime (s)
 let pollMs = 30000, lastOk = 0, lastCount = 0, lastMsg = '';
@@ -54,18 +59,23 @@ function stationFrac(t, s) {              // fractional station index for arc le
 
 // ---------------------------------------------------------------- map
 let map, lineLayers = {}, stationLayers = {};
-function initMap() {
+function createMap() {
   map = L.map('map', {zoomControl: true, attributionControl: true}).setView([48.2082, 16.3738], 12);
   L.tileLayer('https://mapsneu.wien.gv.at/basemap/bmapgrau/normal/google3857/{z}/{y}/{x}.png', {
     maxZoom: 19, className: 'basemap',
     attribution: 'Grundkarte: <a href="https://basemap.at">basemap.at</a> (CC BY 4.0)'}).addTo(map);
+  const zoomLabels = () => map.getContainer().classList.toggle('labels', map.getZoom() >= (mode === 'tram' ? 14 : 13));
+  map.on('zoomend', zoomLabels); zoomLabels();
+}
+function addLayers() {
+  map.invalidateSize();
   const labeled = new Set();
   for (const line of Object.keys(net.lines)) {
     const grp = L.layerGroup(), sg = L.layerGroup();
     const H = tracks[line + '/H'];
-    L.polyline(H.path, {color: H.color, weight: 5, opacity: .9, lineCap: 'round'}).addTo(grp);
+    L.polyline(H.path, {color: H.color, weight: mode === 'tram' ? 4 : 5, opacity: .9, lineCap: 'round'}).addTo(grp);
     for (const s of H.st) {
-      const cm = L.circleMarker([s.lat, s.lon], {radius: 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
+      L.circleMarker([s.lat, s.lon], {radius: mode === 'tram' ? 3.5 : 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
         .bindTooltip(`<b>${s.name}</b><br><span class="sub">${line}</span>`, {direction: 'top', offset: [0, -4]}).addTo(sg);
       if (!labeled.has(s.diva)) {      // interchange stations: one label only
         labeled.add(s.diva);
@@ -75,14 +85,13 @@ function initMap() {
     }
     lineLayers[line] = grp; stationLayers[line] = sg;
   }
-  const zoomLabels = () => map.getContainer().classList.toggle('labels', map.getZoom() >= 13);
-  map.on('zoomend', zoomLabels); zoomLabels();
   map.fitBounds(L.polyline(Object.values(tracks).flatMap((t) => t.path)).getBounds().pad(0.05));
+  map.getContainer().classList.toggle('labels', map.getZoom() >= (mode === 'tram' ? 14 : 13));
   applyFilter();
 }
 
 function trainIcon(d) {
-  const c = COLORS[d.line];
+  const c = colorOf(d.line);
   return L.divIcon({className: 'train-wrap', iconSize: [0, 0],
     html: `<div class="train${d.ghost ? ' ghost' : ''}" style="--c:${c}"><div class="arrow"></div><div class="body">${d.line}</div></div>`});
 }
@@ -91,15 +100,15 @@ function popupHtml(tr) {
   let dep = '';
   if (nd) { const mins = Math.max(0, Math.round((nd.t - nowS()) / 60)); dep = `<br>Abfahrt ${nd.station}: <b>${fmtTime(nd.t)}</b> <span class="sub">(${mins === 0 ? 'jetzt' : 'in ' + mins + ' min'})</span>`; }
   const where = d.at_station ? `in <b>${d.next}</b>` : `${d.prev} → <b>${d.next}</b>`;
-  return `<div class="tip"><b style="color:${COLORS[d.line]}">${d.line}</b> Richtung <b>${d.towards}</b><br>${where}${dep}</div>`;
+  return `<div class="tip"><b style="color:${colorOf(d.line)}">${d.line}</b> Richtung <b>${d.towards}</b><br>${where}${dep}</div>`;
 }
 
 // ---------------------------------------------------------------- schematic
 let svgTrains = {};
 function buildNet() {
-  const W = 1090, left = 60, right = 120, rowH = 150, top = 20;
+  const W = 1090, left = 60, right = 120, rowH = 150, top = 55;
   let html = '', y = top;
-  const rows = LINES.filter((l) => net.lines[l]);
+  const rows = LINES;
   rows.forEach((line, r) => {
     const H = tracks[line + '/H'], n = H.st.length, dx = (W - left - right) / (n - 1);
     const yH = y + 82, yR = yH + 24, c = H.color;
@@ -182,7 +191,7 @@ function frame() {
       if (!row || !host) continue;
       if (!tr.g) {
         tr.g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        tr.g.setAttribute('class', 't'); tr.g.setAttribute('style', `--c:${COLORS[d.line]}`);
+        tr.g.setAttribute('class', 't'); tr.g.setAttribute('style', `--c:${colorOf(d.line)}`);
         tr.g.innerHTML = `<circle r="9"/><text y="3">${d.dir === 'H' ? '›' : '‹'}</text><title></title>`;
         tr.g.addEventListener('click', () => { tr.g.querySelector('title').textContent = ''; });
         host.appendChild(tr.g);
@@ -195,16 +204,19 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-async function poll() {
+let pollGen = 0, pollTimer = null;
+async function poll(gen) {
+  if (gen !== pollGen) return;
   try {
-    const r = await fetch(API + 'trains', {cache: 'no-store'});
+    const r = await fetch(api('trains'), {cache: 'no-store'});
     const res = await r.json();
+    if (gen !== pollGen) return;          // mode switched while the request was running
     if (res.trains) onData(res);
     else lastMsg = res.error || 'keine Daten';
   } catch (e) { lastMsg = 'API nicht erreichbar'; }
   renderStatus();
   if (!$('#debug').hidden) loadDebug();
-  setTimeout(poll, Math.max(15000, pollMs));
+  pollTimer = setTimeout(() => poll(gen), Math.max(15000, pollMs));
 }
 function renderStatus() {
   const el = $('#status'), txt = $('#status-text');
@@ -220,9 +232,9 @@ function renderStatus() {
 // ---------------------------------------------------------------- debug panel
 async function loadDebug() {
   try {
-    const res = await (await fetch(API + 'debug', {cache: 'no-store'})).json();
+    const res = await (await fetch(api('debug'), {cache: 'no-store'})).json();
     const snap = res.snapshot; if (!snap) return;
-    const line = $('#debug-line').value || 'U4';
+    const line = $('#debug-line').value || LINES[0];
     $('#debug-meta').textContent = `Poll ${fmtTime(snap.ts)} · polls ${res.status.polls} · Fehler ${res.status.failures} · vehicle.onStop ${snap.on_stop_seen ? 'vorhanden' : 'nie gesehen'}`;
     let html = '';
     for (const d of ['H', 'R']) {
@@ -254,24 +266,47 @@ function setView(v) {
   if (v === 'map') for (const tr of trains.values()) syncVisibility(tr);
 }
 
-async function boot() {
-  try { net = await (await fetch(API + 'network')).json(); }
-  catch (e) { net = await (await fetch('network.json')).json(); }
+async function loadMode(m) {
+  mode = m; ls.set('wl.mode', m);
+  pollGen++; clearTimeout(pollTimer);
+  for (const tr of trains.values()) { if (tr.marker) map.removeLayer(tr.marker); if (tr.g) tr.g.remove(); }
+  trains.clear();
+  for (const g of [...Object.values(lineLayers), ...Object.values(stationLayers)]) map.removeLayer(g);
+  lineLayers = {}; stationLayers = {}; tracks = {}; lastOk = 0; lastCount = 0; lastMsg = '';
+  try { net = await (await fetch(api('network'))).json(); }
+  catch (e) { net = await (await fetch(MODES[m].file)).json(); }
+  if (mode !== m) return;                 // switched again meanwhile
   for (const [line, v] of Object.entries(net.lines)) for (const [d, td] of Object.entries(v.dirs)) tracks[line + '/' + d] = prepTrack(line, d, td);
-  const f = $('#filters');
-  for (const line of LINES.filter((l) => net.lines[l])) {
+  LINES = Object.keys(net.lines);
+  const saved = ls.get('wl.lines.' + m, LINES).filter((l) => LINES.includes(l));
+  active = new Set(saved.length ? saved : LINES);
+  const f = $('#filters'); f.innerHTML = '';
+  $('#debug-line').innerHTML = '';
+  for (const line of LINES) {
     const b = document.createElement('button');
-    b.className = 'chip'; b.textContent = line; b.dataset.line = line; b.style.setProperty('--c', COLORS[line]);
-    b.addEventListener('click', () => { active.has(line) ? active.delete(line) : active.add(line); ls.set('wl.lines', [...active]); applyFilter(); });
+    b.className = 'chip'; b.textContent = line; b.dataset.line = line; b.style.setProperty('--c', colorOf(line));
+    b.addEventListener('click', () => { active.has(line) ? active.delete(line) : active.add(line); ls.set('wl.lines.' + m, [...active]); applyFilter(); });
     f.appendChild(b);
     $('#debug-line').insertAdjacentHTML('beforeend', `<option>${line}</option>`);
   }
-  initMap(); buildNet();
+  $('#filters').hidden = LINES.length < 2;
+  $('#h1').firstChild.nodeValue = MODES[m].title + ' ';
+  document.title = MODES[m].title + ' live';
+  document.querySelectorAll('.modeswitch button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === m));
+  document.querySelector('.modeswitch').dataset.mode = m;
+  addLayers(); buildNet(); setView(view);
+  renderStatus();
+  poll(pollGen);
+}
+
+async function boot() {
+  createMap();
+  document.querySelectorAll('.modeswitch button').forEach((b) => b.addEventListener('click', () => { if (b.dataset.mode !== mode) loadMode(b.dataset.mode); }));
   $('#tab-map').onclick = () => setView('map'); $('#tab-net').onclick = () => setView('net');
   $('#debug-toggle').onclick = () => { const h = $('#debug').hidden = !$('#debug').hidden; if (!h) loadDebug(); setTimeout(() => map.invalidateSize(), 0); };
   $('#debug-line').onchange = loadDebug;
-  setView(view);
-  poll(); requestAnimationFrame(frame); setInterval(renderStatus, 1000);
+  await loadMode(mode);
+  requestAnimationFrame(frame); setInterval(renderStatus, 1000);
 }
 boot();
 })();

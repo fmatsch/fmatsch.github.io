@@ -11,7 +11,16 @@
 </head>
 <body>
 <header>
-  <div class="title"><span class="logo">U</span><h1>U-Bahn Wien <small>live</small></h1></div>
+  <div class="title">
+    <div class="modeswitch" role="group" aria-label="Verkehrsmittel" data-mode="u">
+      <span class="thumb" aria-hidden="true"></span>
+      <button data-mode="u" aria-pressed="true" aria-label="U-Bahn" title="U-Bahn">U</button>
+      <button data-mode="tram" aria-pressed="false" aria-label="Straßenbahn" title="Straßenbahn">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M8 2h8"/><rect x="5" y="5" width="14" height="12" rx="3"/><path d="M5 11h14M9 21l1.5-4M15 21l-1.5-4M9 14h.01M15 14h.01"/></svg>
+      </button>
+    </div>
+    <h1 id="h1">U-Bahn Wien <small>live</small></h1>
+  </div>
   <nav class="views" role="tablist" aria-label="Ansicht">
     <button role="tab" id="tab-map" aria-selected="true">Karte</button>
     <button role="tab" id="tab-net" aria-selected="false">Netzplan</button>
