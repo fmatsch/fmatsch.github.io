@@ -4,7 +4,7 @@ const API = (window.WL_API || '') + '/api/';
 const MODES = {u: {title: 'U-Bahn Wien', file: 'network.json'}, tram: {title: 'Straßenbahn Wien', file: 'network_tram.json'}};
 let mode = ls0('wl.mode', 'u');
 if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#u') mode = 'u';
-const BUILD = '20261016g';          // bump together with the ?v= in index.html: also busts cached network files
+const BUILD = '20261016h';          // bump together with the ?v= in index.html: also busts cached network files
 const api = (path) => API + path + (mode === 'tram' ? '?mode=tram' : '');
 let LINES = [];
 const colorOf = (line) => (net && net.lines[line] && net.lines[line].color) || '#888';
@@ -86,7 +86,7 @@ function addLayers() {
     }
     lineLayers[line] = grp; stationLayers[line] = sg;
   }
-  map.fitBounds(L.polyline(Object.values(tracks).flatMap((t) => t.path)).getBounds().pad(0.05));
+  map.fitBounds(L.polyline(Object.values(tracks).filter((t) => active.has(t.line)).flatMap((t) => t.path)).getBounds().pad(0.05));
   map.getContainer().classList.toggle('labels', map.getZoom() >= (mode === 'tram' ? 14 : 13));
   applyFilter();
 }
