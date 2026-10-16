@@ -4,6 +4,7 @@ const API = (window.WL_API || '') + '/api/';
 const MODES = {u: {title: 'U-Bahn Wien', file: 'network.json'}, tram: {title: 'Straßenbahn Wien', file: 'network_tram.json'}};
 let mode = ls0('wl.mode', 'u');
 if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#u') mode = 'u';
+const BUILD = '20261016f';          // bump together with the ?v= in index.html: also busts cached network files
 const api = (path) => API + path + (mode === 'tram' ? '?mode=tram' : '');
 let LINES = [];
 const colorOf = (line) => (net && net.lines[line] && net.lines[line].color) || '#888';
@@ -285,8 +286,8 @@ async function loadMode(m) {
   trains.clear();
   for (const g of [...Object.values(lineLayers), ...Object.values(stationLayers)]) map.removeLayer(g);
   lineLayers = {}; stationLayers = {}; tracks = {}; lastOk = 0; lastCount = 0; lastMsg = '';
-  try { net = await (await fetch(api('network'))).json(); }
-  catch (e) { net = await (await fetch(MODES[m].file)).json(); }
+  try { net = await (await fetch(api('network') + (mode === 'tram' ? '&' : '?') + 'v=' + BUILD)).json(); }
+  catch (e) { net = await (await fetch(MODES[m].file + '?v=' + BUILD)).json(); }
   if (mode !== m) return;                 // switched again meanwhile
   for (const [line, v] of Object.entries(net.lines)) for (const [d, td] of Object.entries(v.dirs)) tracks[line + '/' + d] = prepTrack(line, d, td);
   LINES = Object.keys(net.lines);
