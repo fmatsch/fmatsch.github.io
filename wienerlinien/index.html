@@ -7,7 +7,7 @@
 <meta name="description" content="Berechnete Live-Positionen aller Wiener U-Bahn-Züge aus den Echtzeit-Abfahrtsdaten der Wiener Linien.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23E3000F'/%3E%3Cpath d='M9 8v10a7 7 0 0 0 14 0V8' fill='none' stroke='white' stroke-width='3.4'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="style.css?v=20261016h">
+<link rel="stylesheet" href="style.css?v=20261018a">
 </head>
 <body>
 <header>
@@ -38,13 +38,14 @@
     <label>Linie <select id="debug-line"></select></label></div>
   <div id="debug-body"></div>
 </section>
+<div class="update" id="update" hidden><span id="update-text"></span><button id="update-btn" class="update-btn"></button></div>
 <footer>
   <span>Datenquelle: Stadt Wien – <a href="https://data.wien.gv.at">data.wien.gv.at</a> / Wiener Linien (CC BY 4.0)</span>
   <span>Positionen sind aus Abfahrtsprognosen <em>berechnet</em>, keine GPS-Daten.</span>
-  <button id="debug-toggle" class="link">Debug</button>
+  <span id="app-version"></span><button id="debug-toggle" class="link">Debug</button>
 </footer>
 <script src="vendor/leaflet.js"></script>
-<script src="config.js?v=20261016h"></script>
-<script src="app.js?v=20261016h"></script>
+<script src="config.js?v=20261018a"></script>
+<script src="app.js?v=20261018a"></script>
 </body>
 </html>

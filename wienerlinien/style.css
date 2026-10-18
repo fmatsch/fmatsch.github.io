@@ -62,3 +62,15 @@ footer a{color:inherit}
 .modeswitch button:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
 .chip-link{border:0;background:none;color:var(--mute);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:3px 6px}
 .filters{max-width:100%}
+/* update banner (desktop app only) */
+.update{display:flex;align-items:center;gap:12px;justify-content:center;padding:8px 16px;background:var(--accent);color:#fff;font-size:14px}
+.update[hidden]{display:none}
+.update-btn{border:1.5px solid #fff;background:transparent;color:#fff;border-radius:8px;padding:4px 12px;font:inherit;font-weight:600;cursor:pointer}
+.update-btn:hover{background:#fff;color:var(--accent)}
+#app-version{margin-left:auto;color:var(--mute)}
+#app-version + .link{margin-left:12px}
+/* vehicles per line */
+.chip{display:inline-flex;align-items:center;gap:6px}
+.chip .n{min-width:18px;padding:0 6px;border-radius:99px;background:rgba(255,255,255,.3);font-size:11px;line-height:18px;text-align:center}
+.chip[aria-pressed=false] .n{background:color-mix(in srgb,var(--c) 14%,transparent)}
+.chip .n[hidden]{display:none}

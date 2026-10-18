@@ -4,7 +4,7 @@ const API = (window.WL_API || '') + '/api/';
 const MODES = {u: {title: 'U-Bahn Wien', file: 'network.json'}, tram: {title: 'Straßenbahn Wien', file: 'network_tram.json'}};
 let mode = ls0('wl.mode', 'u');
 if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#u') mode = 'u';
-const BUILD = '20261016h';          // bump together with the ?v= in index.html: also busts cached network files
+const BUILD = '20261018a';          // bump together with the ?v= in index.html: also busts cached network files
 const api = (path) => API + path + (mode === 'tram' ? '?mode=tram' : '');
 let LINES = [];
 const colorOf = (line) => (net && net.lines[line] && net.lines[line].color) || '#888';
@@ -146,6 +146,19 @@ function applyFilter() {
   document.querySelectorAll('#net [data-line]').forEach((g) => { g.style.display = active.has(g.dataset.line) ? '' : 'none'; });
   document.querySelectorAll('.chip').forEach((b) => b.setAttribute('aria-pressed', active.has(b.dataset.line)));
   for (const tr of trains.values()) syncVisibility(tr);
+  updateCounts();
+}
+// number of vehicles per line, shown as a badge on the line chips (only for lines we currently have data for)
+function updateCounts() {
+  const counts = {};
+  for (const tr of trains.values()) counts[tr.data.line] = (counts[tr.data.line] || 0) + 1;
+  document.querySelectorAll('.chip').forEach((b) => {
+    const line = b.dataset.line, n = b.querySelector('.n'), c = counts[line] || 0;
+    const known = lastOk > 0 && active.has(line);          // trams: only the lines that are polled right now
+    n.hidden = !known;
+    n.textContent = c;
+    b.title = known ? `${line}: ${c} ${c === 1 ? (mode === 'tram' ? 'Bahn' : 'Zug') : (mode === 'tram' ? 'Bahnen' : 'Züge')}` : '';
+  });
 }
 function syncVisibility(tr) {
   const on = active.has(tr.data.line);
@@ -176,6 +189,7 @@ function onData(res) {
     tr.ghost = d.ghost;
   }
   for (const [id, tr] of trains) if (!seen.has(id)) { if (tr.marker) map.removeLayer(tr.marker); if (tr.g) tr.g.remove(); trains.delete(id); }
+  updateCounts();
 }
 
 function frame() {
@@ -298,7 +312,7 @@ async function loadMode(m) {
   $('#debug-line').innerHTML = '';
   for (const line of LINES) {
     const b = document.createElement('button');
-    b.className = 'chip'; b.textContent = line; b.dataset.line = line; b.style.setProperty('--c', colorOf(line));
+    b.className = 'chip'; b.innerHTML = `<span>${line}</span><span class="n" hidden></span>`; b.dataset.line = line; b.style.setProperty('--c', colorOf(line));
     b.addEventListener('click', () => { active.has(line) ? active.delete(line) : active.add(line); ls.set('wl.lines.' + m, [...active]); applyFilter(); pollNow(); });
     f.appendChild(b);
     $('#debug-line').insertAdjacentHTML('beforeend', `<option>${line}</option>`);
@@ -336,5 +350,30 @@ async function boot() {
   await loadMode(mode);
   requestAnimationFrame(frame); setInterval(renderStatus, 1000);
 }
+// ---------------------------------------------------------------- desktop app bridge (update loop)
+// The Mac/Windows/Hackberry wrappers serve this page from 127.0.0.1 and answer /_app.json with their version and update state.
+// On the public website the request simply fails and nothing is shown.
+async function appStatus() {
+  try {
+    const r = await fetch('_app.json', {cache: 'no-store'});
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('json')) return;
+    const st = await r.json();
+    $('#app-version').textContent = st.version ? `App ${st.version}` : '';
+    const u = st.update || {}, box = $('#update'), txt = $('#update-text'), btn = $('#update-btn');
+    const label = {available: ['Neue Version ' + u.version + ' verfügbar', st.platform === 'hackberry' ? 'Jetzt installieren' : 'Herunterladen'],
+                   downloading: ['Update ' + u.version + ' wird geladen … ' + (u.percent || 0) + ' %', null],
+                   ready: ['Update ' + u.version + ' ist bereit', 'Neu starten'],
+                   error: ['Update-Prüfung fehlgeschlagen', 'Erneut prüfen']}[u.state];
+    box.hidden = !label;
+    if (label) { txt.textContent = label[0]; btn.hidden = !label[1]; btn.textContent = label[1] || ''; btn.dataset.state = u.state; }
+  } catch (e) { /* not running inside an app */ }
+}
+$('#update-btn').addEventListener('click', async () => {
+  const state = $('#update-btn').dataset.state;
+  try { await fetch(state === 'error' ? '_app/check' : '_app/install', {method: 'POST'}); } catch (e) {}
+  setTimeout(appStatus, 1500);
+});
+appStatus(); setInterval(appStatus, 60000);
+
 boot();
 })();
