@@ -1,11 +1,18 @@
 (() => {
 'use strict';
 const API = (window.WL_API || '') + '/api/';
-const MODES = {u: {title: 'U-Bahn Wien', file: 'network.json'}, tram: {title: 'Straßenbahn Wien', file: 'network_tram.json'}};
+// pick: the network has too many lines for a chip each (bus: ~115) - the user picks the lines to show, max: how many at once
+// (the API limits how many stops may be asked per minute, so every selected line costs polling budget)
+const MODES = {
+  u: {title: 'U-Bahn Wien', file: 'network.json'},
+  tram: {title: 'Straßenbahn Wien', file: 'network_tram.json', dflt: ['1', '2', 'D']},
+  bus: {title: 'Bus Wien', file: 'network_bus.json', pick: true, max: 12, dflt: ['13A', '48A']},
+};
 let mode = ls0('wl.mode', 'u');
-if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#u') mode = 'u';
-const BUILD = '20261019a';          // bump together with the ?v= in index.html: also busts cached network files
-const api = (path) => API + path + (mode === 'tram' ? '?mode=tram' : '');
+if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#bus') mode = 'bus'; else if (location.hash === '#u') mode = 'u';
+if (!MODES[mode]) mode = 'u';
+const BUILD = '20261104a';          // bump together with the ?v= in index.html: also busts cached network files
+const api = (path) => API + path + (mode === 'u' ? '' : '?mode=' + mode);
 let LINES = [];
 const colorOf = (line) => (net && net.lines[line] && net.lines[line].color) || '#888';
 function ls0(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }
@@ -14,7 +21,7 @@ const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString('de-AT', {timeZone:
 const ls = {get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } },
             set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }};
 
-let net = null, tracks = {}, active = new Set();
+let net = null, tracks = {}, active = new Set(), labeled = new Set();
 let trains = new Map();            // id -> {data, err, t0, marker, g}
 let clockOffset = 0;               // serverTime - clientTime (s)
 let pollMs = 30000, lastOk = 0, lastCount = 0, lastMsg = '';
@@ -65,36 +72,45 @@ function createMap() {
   L.tileLayer('https://mapsneu.wien.gv.at/basemap/bmapgrau/normal/google3857/{z}/{y}/{x}.png', {
     maxZoom: 19, className: 'basemap',
     attribution: 'Grundkarte: <a href="https://basemap.at">basemap.at</a> (CC BY 4.0)'}).addTo(map);
-  const zoomLabels = () => map.getContainer().classList.toggle('labels', map.getZoom() >= (mode === 'tram' ? 14 : 13));
+  const zoomLabels = () => map.getContainer().classList.toggle('labels', map.getZoom() >= labelZoom());
   map.on('zoomend', zoomLabels); zoomLabels();
+}
+// Layers are built on demand: the bus network has ~115 lines of which only a few are shown.
+function ensureLayers(line) {
+  if (lineLayers[line]) return;
+  const grp = L.layerGroup(), sg = L.layerGroup();
+  const H = tracks[line + '/H'];
+  const thin = mode !== 'u';
+  L.polyline(H.path, {color: H.color, weight: thin ? 3 : 5, opacity: thin ? .8 : .9, lineCap: 'round'}).addTo(grp);
+  for (const s of H.st) {
+    L.circleMarker([s.lat, s.lon], {radius: thin ? 3.5 : 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
+      .bindTooltip(`<b>${s.name}</b><br><span class="sub">${line}</span>`, {direction: 'top', offset: [0, -4]}).addTo(sg);
+    const key = s.diva + '/' + line;
+    if (mode === 'u' ? !labeled.has(s.diva) : !labeled.has(s.name)) {      // interchange stations: one label only
+      labeled.add(mode === 'u' ? s.diva : s.name);
+      L.marker([s.lat, s.lon], {interactive: false, keyboard: false, icon: L.divIcon({className: 'stn-label-wrap', iconSize: [0, 0],
+        html: `<span class="stn-label">${s.name}</span>`})}).addTo(sg);
+    }
+  }
+  lineLayers[line] = grp; stationLayers[line] = sg;
+}
+const labelZoom = () => (mode === 'u' ? 13 : 14);
+function fitToActive() {
+  const pts = Object.values(tracks).filter((t) => active.has(t.line)).flatMap((t) => t.path);
+  if (pts.length) map.fitBounds(L.polyline(pts).getBounds().pad(0.05));
 }
 function addLayers() {
   map.invalidateSize();
-  const labeled = new Set();
-  for (const line of Object.keys(net.lines)) {
-    const grp = L.layerGroup(), sg = L.layerGroup();
-    const H = tracks[line + '/H'];
-    L.polyline(H.path, {color: H.color, weight: mode === 'tram' ? 3 : 5, opacity: mode === 'tram' ? .8 : .9, lineCap: 'round'}).addTo(grp);
-    for (const s of H.st) {
-      L.circleMarker([s.lat, s.lon], {radius: mode === 'tram' ? 3.5 : 4.5, weight: 2, color: H.color, fillColor: '#fff', fillOpacity: 1})
-        .bindTooltip(`<b>${s.name}</b><br><span class="sub">${line}</span>`, {direction: 'top', offset: [0, -4]}).addTo(sg);
-      if (!labeled.has(s.diva)) {      // interchange stations: one label only
-        labeled.add(s.diva);
-        L.marker([s.lat, s.lon], {interactive: false, keyboard: false, icon: L.divIcon({className: 'stn-label-wrap', iconSize: [0, 0],
-          html: `<span class="stn-label">${s.name}</span>`})}).addTo(sg);
-      }
-    }
-    lineLayers[line] = grp; stationLayers[line] = sg;
-  }
-  map.fitBounds(L.polyline(Object.values(tracks).filter((t) => active.has(t.line)).flatMap((t) => t.path)).getBounds().pad(0.05));
-  map.getContainer().classList.toggle('labels', map.getZoom() >= (mode === 'tram' ? 14 : 13));
+  labeled = new Set();
+  fitToActive();
+  map.getContainer().classList.toggle('labels', map.getZoom() >= labelZoom());
   applyFilter();
 }
 
 function trainIcon(d) {
   const c = colorOf(d.line);
   return L.divIcon({className: 'train-wrap', iconSize: [0, 0],
-    html: `<div class="train${d.ghost ? ' ghost' : ''}" style="--c:${c}"><div class="arrow"></div><div class="body">${d.line}</div></div>`});
+    html: `<div class="train${d.ghost ? ' ghost' : ''}${d.line.length > 2 ? ' long' : ''}" style="--c:${c}"><div class="arrow"></div><div class="body">${d.line}</div></div>`});
 }
 function popupHtml(tr) {
   const d = tr.data, nd = d.next_departure;
@@ -109,7 +125,7 @@ let svgTrains = {};
 function buildNet() {
   const W = 1090, left = 60, right = 120, rowH = 150, top = 55;
   let html = '', y = top;
-  const rows = LINES;
+  const rows = MODES[mode].pick ? LINES.filter((l) => active.has(l)) : LINES;
   rows.forEach((line, r) => {
     const H = tracks[line + '/H'], n = H.st.length, dx = (W - left - right) / (n - 1);
     const yH = y + 82, yR = yH + 24, c = H.color;
@@ -139,6 +155,7 @@ function netX(row, track, frac) {
 
 // ---------------------------------------------------------------- data + animation
 function applyFilter() {
+  for (const line of active) ensureLayers(line);
   for (const line of Object.keys(lineLayers)) {
     const on = active.has(line);
     for (const g of [lineLayers[line], stationLayers[line]]) on ? g.addTo(map) : map.removeLayer(g);
@@ -148,6 +165,7 @@ function applyFilter() {
   for (const tr of trains.values()) syncVisibility(tr);
   updateCounts();
 }
+
 // number of vehicles per line, shown as a badge on the line chips (only for lines we currently have data for)
 function updateCounts() {
   const counts = {};
@@ -157,7 +175,7 @@ function updateCounts() {
     const known = lastOk > 0 && active.has(line);          // trams: only the lines that are polled right now
     n.hidden = !known;
     n.textContent = c;
-    b.title = known ? `${line}: ${c} ${c === 1 ? (mode === 'tram' ? 'Bahn' : 'Zug') : (mode === 'tram' ? 'Bahnen' : 'Züge')}` : '';
+    b.title = known ? `${line}: ${c} ${c === 1 ? (mode === 'u' ? 'Zug' : mode === 'tram' ? 'Bahn' : 'Bus') : (mode === 'u' ? 'Züge' : mode === 'tram' ? 'Bahnen' : 'Busse')}` : '';
   });
 }
 function syncVisibility(tr) {
@@ -221,15 +239,15 @@ function frame() {
 
 let pollGen = 0, pollTimer = null, loadingNew = false, nowTimer = null;
 function pollNow() {            // tram: the set of wanted lines changed -> fetch soon (debounced)
-  if (mode !== 'tram') return;
+  if (mode === 'u') return;
   clearTimeout(nowTimer);
   nowTimer = setTimeout(() => { pollGen++; clearTimeout(pollTimer); poll(pollGen); }, 700);
 }
 async function poll(gen) {
   if (gen !== pollGen) return;
   try {
-    if (mode === 'tram' && active.size === 0) { renderStatus(); pollTimer = setTimeout(() => poll(gen), 5000); return; }
-    const r = await fetch(api('trains') + (mode === 'tram' ? '&lines=' + [...active].join(',') : ''), {cache: 'no-store'});
+    if (mode !== 'u' && active.size === 0) { renderStatus(); pollTimer = setTimeout(() => poll(gen), 5000); return; }
+    const r = await fetch(api('trains') + (mode !== 'u' ? '&lines=' + [...active].join(',') : ''), {cache: 'no-store'});
     const res = await r.json();
     if (gen !== pollGen) return;          // mode switched while the request was running
     if (res.trains) { onData(res); loadingNew = !!res.loading; }
@@ -244,7 +262,7 @@ function renderStatus() {
   const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
   const ok = age !== null && age < Math.max(90, pollMs * 2.5 / 1000);
   el.className = 'status ' + (ok ? 'ok' : 'bad');
-  txt.textContent = ok ? `${[...trains.values()].filter((t) => active.has(t.data.line)).length} Züge · Stand vor ${age} s${mode === 'tram' && active.size > 6 ? ' · viele Linien = langsamere Updates' : ''}` : `keine aktuellen Daten${lastMsg && lastMsg !== 'ok' ? ' – ' + lastMsg : ''}`;
+  txt.textContent = ok ? `${[...trains.values()].filter((t) => active.has(t.data.line)).length} ${mode === 'u' ? 'Züge' : mode === 'tram' ? 'Bahnen' : 'Busse'} · Stand vor ${age} s${mode !== 'u' && active.size > 6 ? ' · viele Linien = langsamere Updates' : ''}` : `keine aktuellen Daten${lastMsg && lastMsg !== 'ok' ? ' – ' + lastMsg : ''}`;
   const n = $('#notice');
   if (ok && loadingNew) { n.hidden = false; n.textContent = 'Daten der gewählten Linien werden geladen …'; }
   else if (ok && lastCount === 0) { n.hidden = false; n.textContent = 'Gerade fahren keine Züge (Nachtpause) oder die Wiener Linien liefern keine Prognosen.'; }
@@ -293,6 +311,57 @@ function setSwitch(m) {
   document.querySelector('.modeswitch').dataset.mode = m;
   $('#h1').firstChild.nodeValue = MODES[m].title + ' ';
 }
+function setActive(next) { active = next; ls.set('wl.lines.' + mode, [...active]); applyFilter(); pollNow(); }
+
+// Line chips. Modes with few lines show one chip per line (click = show/hide); the bus network lets the user pick lines.
+function renderFilters() {
+  const f = $('#filters'), cfg = MODES[mode], pick = !!cfg.pick;
+  f.innerHTML = '';
+  for (const line of pick ? LINES.filter((l) => active.has(l)) : LINES) {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.innerHTML = `<span>${line}</span><span class="n" hidden></span>${pick ? '<span class="x" aria-hidden="true">×</span>' : ''}`;
+    b.dataset.line = line; b.style.setProperty('--c', colorOf(line));
+    if (pick) b.setAttribute('aria-label', `Linie ${line} ausblenden`);
+    b.addEventListener('click', () => {
+      const next = new Set(active);
+      next.has(line) ? next.delete(line) : next.add(line);
+      setActive(next);
+      if (pick) { renderFilters(); buildNet(); }
+    });
+    f.appendChild(b);
+  }
+  if (pick) {
+    const inp = document.createElement('input');
+    inp.className = 'line-input'; inp.setAttribute('list', 'lines-list'); inp.placeholder = '+ Linie';
+    inp.setAttribute('aria-label', 'Linie hinzufügen'); inp.autocomplete = 'off'; inp.size = 7;
+    const add = () => {
+      const v = inp.value.trim().toUpperCase(), line = LINES.find((l) => l.toUpperCase() === v);
+      if (!line) return;
+      inp.value = '';
+      if (active.has(line)) return;
+      const next = new Set(active);
+      if (next.size >= cfg.max) next.delete(next.values().next().value);      // oldest selection makes room
+      next.add(line);
+      setActive(next); renderFilters(); buildNet(); fitToActive();
+      $('#filters .line-input').focus();
+    };
+    inp.addEventListener('change', add);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+    f.appendChild(inp);
+    const hint = document.createElement('span');
+    hint.className = 'hint-small'; hint.textContent = `max. ${cfg.max} Linien`;
+    f.appendChild(hint);
+  } else if (LINES.length > 6) {
+    for (const [label, all] of [['alle', true], ['keine', false]]) {
+      const b = document.createElement('button');
+      b.className = 'chip-link'; b.textContent = label;
+      b.addEventListener('click', () => setActive(new Set(all ? LINES : [])));
+      f.appendChild(b);
+    }
+  }
+  f.hidden = !pick && LINES.length < 2;
+}
+
 async function loadMode(m) {
   mode = m; ls.set('wl.mode', m); setSwitch(m);
   pollGen++; clearTimeout(pollTimer);
@@ -300,32 +369,17 @@ async function loadMode(m) {
   trains.clear();
   for (const g of [...Object.values(lineLayers), ...Object.values(stationLayers)]) map.removeLayer(g);
   lineLayers = {}; stationLayers = {}; tracks = {}; lastOk = 0; lastCount = 0; lastMsg = '';
-  try { net = await (await fetch(api('network') + (mode === 'tram' ? '&' : '?') + 'v=' + BUILD)).json(); }
+  try { net = await (await fetch(api('network') + (mode === 'u' ? '?' : '&') + 'v=' + BUILD)).json(); }
   catch (e) { net = await (await fetch(MODES[m].file + '?v=' + BUILD)).json(); }
   if (mode !== m) return;                 // switched again meanwhile
   for (const [line, v] of Object.entries(net.lines)) for (const [d, td] of Object.entries(v.dirs)) tracks[line + '/' + d] = prepTrack(line, d, td);
   LINES = Object.keys(net.lines);
-  const dflt = m === 'tram' ? ['1', '2', 'D'] : LINES;      // the API limits how many stops may be asked per minute: start small
+  const dflt = (MODES[m].dflt || LINES).filter((l) => LINES.includes(l));     // the API limits how many stops may be asked per minute: start small
   const saved = ls.get('wl.lines.' + m, dflt).filter((l) => LINES.includes(l));
-  active = new Set(saved.length ? saved : LINES);
-  const f = $('#filters'); f.innerHTML = '';
-  $('#debug-line').innerHTML = '';
-  for (const line of LINES) {
-    const b = document.createElement('button');
-    b.className = 'chip'; b.innerHTML = `<span>${line}</span><span class="n" hidden></span>`; b.dataset.line = line; b.style.setProperty('--c', colorOf(line));
-    b.addEventListener('click', () => { active.has(line) ? active.delete(line) : active.add(line); ls.set('wl.lines.' + m, [...active]); applyFilter(); pollNow(); });
-    f.appendChild(b);
-    $('#debug-line').insertAdjacentHTML('beforeend', `<option>${line}</option>`);
-  }
-  if (LINES.length > 6) {
-    for (const [label, all] of [['alle', true], ['keine', false]]) {
-      const b = document.createElement('button');
-      b.className = 'chip-link'; b.textContent = label;
-      b.addEventListener('click', () => { active = new Set(all ? LINES : []); ls.set('wl.lines.' + m, [...active]); applyFilter(); pollNow(); });
-      f.appendChild(b);
-    }
-  }
-  $('#filters').hidden = LINES.length < 2;
+  active = new Set(saved.length ? saved : (MODES[m].pick ? dflt : LINES));
+  $('#debug-line').innerHTML = LINES.map((l) => `<option>${l}</option>`).join('');
+  $('#lines-list').innerHTML = LINES.map((l) => `<option value="${l}">`).join('');
+  renderFilters();
   $('#h1').firstChild.nodeValue = MODES[m].title + ' ';
   document.title = MODES[m].title + ' live';
   document.querySelectorAll('.modeswitch button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === m));

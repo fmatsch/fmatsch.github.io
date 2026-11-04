@@ -54,9 +54,10 @@ footer a{color:inherit}
 .labels .stn-label{display:block}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .stn-label{color:#ececee;text-shadow:-1px -1px 0 #141416,1px -1px 0 #141416,-1px 1px 0 #141416,1px 1px 0 #141416,0 0 4px #141416}}
 /* mode switch U-Bahn / Straßenbahn */
-.modeswitch{position:relative;display:grid;grid-template-columns:1fr 1fr;width:68px;height:32px;border-radius:9px;background:var(--bg);border:1.5px solid var(--accent);overflow:hidden}
-.modeswitch .thumb{position:absolute;top:0;bottom:0;left:0;width:50%;background:var(--accent);transition:transform .22s cubic-bezier(.3,.9,.3,1)}
+.modeswitch{position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;width:102px;height:32px;border-radius:9px;background:var(--bg);border:1.5px solid var(--accent);overflow:hidden}
+.modeswitch .thumb{position:absolute;top:0;bottom:0;left:0;width:33.334%;background:var(--accent);transition:transform .22s cubic-bezier(.3,.9,.3,1)}
 .modeswitch[data-mode=tram] .thumb{transform:translateX(100%)}
+.modeswitch[data-mode=bus] .thumb{transform:translateX(200%)}
 .modeswitch button{position:relative;z-index:1;display:grid;place-items:center;border:0;background:transparent;color:var(--accent);font:800 15px/1 system-ui;cursor:pointer;padding:0;transition:color .2s}
 .modeswitch button[aria-pressed=true]{color:#fff}
 .modeswitch button:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
@@ -74,3 +75,9 @@ footer a{color:inherit}
 .chip .n{min-width:18px;padding:0 6px;border-radius:99px;background:rgba(255,255,255,.3);font-size:11px;line-height:18px;text-align:center}
 .chip[aria-pressed=false] .n{background:color-mix(in srgb,var(--c) 14%,transparent)}
 .chip .n[hidden]{display:none}
+/* bus: picked lines */
+.chip .x{margin-left:2px;opacity:.7;font-weight:400}
+.line-input{border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:3px 12px;font:600 13px/1.3 inherit;font-family:inherit;width:92px}
+.line-input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.hint-small{color:var(--mute);font-size:12px;align-self:center}
+.train.long .body{font-size:7px;letter-spacing:-.2px}
