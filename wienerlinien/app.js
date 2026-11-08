@@ -6,12 +6,14 @@ const API = (window.WL_API || '') + '/api/';
 const MODES = {
   u: {title: 'U-Bahn Wien', file: 'network.json'},
   tram: {title: 'Straßenbahn Wien', file: 'network_tram.json', dflt: ['1', '2', 'D']},
+  // schedule: no open real-time feed exists for the S-Bahn - positions are computed from the timetable only
+  sbahn: {title: 'S-Bahn Wien', file: 'network_sbahn.json', schedule: true},
   bus: {title: 'Bus Wien', file: 'network_bus.json', pick: true, max: 12, dflt: ['13A', '48A']},
 };
 let mode = ls0('wl.mode', 'u');
-if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#bus') mode = 'bus'; else if (location.hash === '#u') mode = 'u';
+if (location.hash === '#sbahn') mode = 'sbahn'; else if (location.hash === '#tram') mode = 'tram'; else if (location.hash === '#bus') mode = 'bus'; else if (location.hash === '#u') mode = 'u';
 if (!MODES[mode]) mode = 'u';
-const BUILD = '20261104a';          // bump together with the ?v= in index.html: also busts cached network files
+const BUILD = '20261108a';          // bump together with the ?v= in index.html: also busts cached network files
 const api = (path) => API + path + (mode === 'u' ? '' : '?mode=' + mode);
 let LINES = [];
 const colorOf = (line) => (net && net.lines[line] && net.lines[line].color) || '#888';
@@ -94,7 +96,7 @@ function ensureLayers(line) {
   }
   lineLayers[line] = grp; stationLayers[line] = sg;
 }
-const labelZoom = () => (mode === 'u' ? 13 : 14);
+const labelZoom = () => (mode === 'u' ? 13 : mode === 'sbahn' ? 12 : 14);
 function fitToActive() {
   const pts = Object.values(tracks).filter((t) => active.has(t.line)).flatMap((t) => t.path);
   if (pts.length) map.fitBounds(L.polyline(pts).getBounds().pad(0.05));
@@ -110,7 +112,7 @@ function addLayers() {
 function trainIcon(d) {
   const c = colorOf(d.line);
   return L.divIcon({className: 'train-wrap', iconSize: [0, 0],
-    html: `<div class="train${d.ghost ? ' ghost' : ''}${d.line.length > 2 ? ' long' : ''}" style="--c:${c}"><div class="arrow"></div><div class="body">${d.line}</div></div>`});
+    html: `<div class="train${d.ghost ? ' ghost' : ''}${d.schedule ? ' sched' : ''}${d.line.length > 2 ? ' long' : ''}" style="--c:${c}"><div class="arrow"></div><div class="body">${d.line}</div></div>`});
 }
 function popupHtml(tr) {
   const d = tr.data, nd = d.next_departure;
@@ -175,7 +177,7 @@ function updateCounts() {
     const known = lastOk > 0 && active.has(line);          // trams: only the lines that are polled right now
     n.hidden = !known;
     n.textContent = c;
-    b.title = known ? `${line}: ${c} ${c === 1 ? (mode === 'u' ? 'Zug' : mode === 'tram' ? 'Bahn' : 'Bus') : (mode === 'u' ? 'Züge' : mode === 'tram' ? 'Bahnen' : 'Busse')}` : '';
+    b.title = known ? `${line}: ${c} ${c === 1 ? (mode === 'tram' ? 'Bahn' : mode === 'bus' ? 'Bus' : 'Zug') : (mode === 'tram' ? 'Bahnen' : mode === 'bus' ? 'Busse' : 'Züge')}` : '';
   });
 }
 function syncVisibility(tr) {
@@ -262,10 +264,10 @@ function renderStatus() {
   const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
   const ok = age !== null && age < Math.max(90, pollMs * 2.5 / 1000);
   el.className = 'status ' + (ok ? 'ok' : 'bad');
-  txt.textContent = ok ? `${[...trains.values()].filter((t) => active.has(t.data.line)).length} ${mode === 'u' ? 'Züge' : mode === 'tram' ? 'Bahnen' : 'Busse'} · Stand vor ${age} s${mode !== 'u' && active.size > 6 ? ' · viele Linien = langsamere Updates' : ''}` : `keine aktuellen Daten${lastMsg && lastMsg !== 'ok' ? ' – ' + lastMsg : ''}`;
+  txt.textContent = ok ? `${[...trains.values()].filter((t) => active.has(t.data.line)).length} ${mode === 'tram' ? 'Bahnen' : mode === 'bus' ? 'Busse' : 'Züge'} · ${MODES[mode].schedule ? 'nur Fahrplan, keine Echtzeit' : 'Stand vor ' + age + ' s'}${mode !== 'u' && !MODES[mode].schedule && active.size > 6 ? ' · viele Linien = langsamere Updates' : ''}` : `keine aktuellen Daten${lastMsg && lastMsg !== 'ok' ? ' – ' + lastMsg : ''}`;
   const n = $('#notice');
   if (ok && loadingNew) { n.hidden = false; n.textContent = 'Daten der gewählten Linien werden geladen …'; }
-  else if (ok && lastCount === 0) { n.hidden = false; n.textContent = 'Gerade fahren keine Züge (Nachtpause) oder die Wiener Linien liefern keine Prognosen.'; }
+  else if (ok && lastCount === 0) { n.hidden = false; n.textContent = MODES[mode].schedule ? 'Laut Fahrplan fährt gerade keine S-Bahn (Nachtpause).' : 'Gerade fahren keine Züge (Nachtpause) oder die Wiener Linien liefern keine Prognosen.'; }
   else n.hidden = true;
 }
 
