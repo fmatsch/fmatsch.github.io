@@ -256,6 +256,9 @@ const groups = [
   {
     title: "Spiele",
     projects: [
+      { url: "https://fmatsch.ist/backrooms/", name: "Backrooms Forever", version: "v1.0.0", icon: "icons/backrooms.svg",
+        desc: "First-Person-Spiel in den Backrooms, direkt im Browser: acht zufällig erzeugte Levels nach dem Backrooms Wiki, Ausgang suchen, Punkte und Levels sammeln – und dabei nicht den Verstand verlieren. Spielstand bleibt als Cookie erhalten.",
+        platforms: ["Browser"] },
       { repo: "minecraft-uploader", name: "Minecraft Uploader", version: "v1.0.1", icon: "icons/minecraft-uploader.png",
         desc: "Lokale Minecraft-Welten auswählen und per SFTP, FTP oder lokalem Ordner auf einen Server hochladen – mit Server-Specs und Kompatibilitätsprüfung zwischen Welt und Serverversion.",
         platforms: ["macOS", "Windows"] },
@@ -299,14 +302,14 @@ function card(p) {
       <div class="top">
         ${icon}
         <div>
-          <h3><a href="${PAGES}${p.repo}/">${esc(p.name)}</a></h3>
+          <h3><a href="${p.url || PAGES + p.repo + "/"}">${esc(p.name)}</a></h3>
           ${p.version ? `<div class="version">${esc(p.version)}</div>` : ""}
         </div>
       </div>
       <p>${esc(p.desc)}</p>
       <div class="meta">
         ${p.platforms.map(x => `<span class="tag">${esc(x)}</span>`).join("")}
-        <a class="src" href="${GH}${p.repo}" aria-label="Quellcode von ${esc(p.name)} auf GitHub">Code ↗</a>
+        ${p.repo ? `<a class="src" href="${GH}${p.repo}" aria-label="Quellcode von ${esc(p.name)} auf GitHub">Code ↗</a>` : `<a class="src" href="${p.url}">Spielen ↗</a>`}
       </div>
     </article>`;
 }
